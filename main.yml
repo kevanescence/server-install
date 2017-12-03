@@ -19,6 +19,12 @@
       - git
       - apache2
       - openjdk-8-jdk
+      - python
+      - python-apt
+      - python3-apt
+      - python-pip
+      - virtualenv
+      - docker
     become: yes
 
 - name: Installing jenkins
@@ -27,10 +33,35 @@
     jenkins_version: '2.92'
     jenkins_package_state: "present"
     jenkins_http_port: 9180
-    jenkins_admin_username: 'admin'
-    jenkins_admin_password: 'admin'
+    jenkins_admin_username: 'kevanescence'
+    jenkins_admin_password: 'kevanescence'
     jenkins_plugins: ["cloverphp", "cobertura", "docker-workflow", "embeddable-build-status", "jdepend", "analysis-collector", "xunit", "violations"]
   roles:
     - role: geerlingguy.jenkins
       become: true
+
+- name: Initialization of services hosted by docker
+  hosts: all
+  tasks:
+    - name: "Installing required docker apis (pip)"
+      pip:
+        name: docker-py
+
+    - name: "Downloaded docker images"
+      docker_image:
+        name: "{{ item }}"
+      with_items:
+        - selenium/hub
+        - linuxserver/piwigo
+        - owncloud
+
+    - name: "Creating containers"
+      docker_container:
+        name: selenium-hub
+        image: selenium-hub
+        state: started
+        recreate: yes
+        restart: yes
+        published_ports:
+          - "4444:4444"
 
