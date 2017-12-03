@@ -1,0 +1,36 @@
+---
+
+
+- name: Installing packages
+  hosts: all
+  tasks:
+  - name: Install package https provider
+    package:
+      name: apt-transport-https
+      state: latest
+    become: yes
+
+  - name: install some packages
+    package:
+      name: "{{ item }}"
+      state: latest
+    with_items:
+      - curl
+      - git
+      - apache2
+      - openjdk-8-jdk
+    become: yes
+
+- name: Installing jenkins
+  hosts: all
+  vars:
+    jenkins_version: '2.92'
+    jenkins_package_state: "present"
+    jenkins_http_port: 9180
+    jenkins_admin_username: 'admin'
+    jenkins_admin_password: 'admin'
+    jenkins_plugins: ["cloverphp", "cobertura", "docker-workflow", "embeddable-build-status", "jdepend", "analysis-collector", "xunit", "violations"]
+  roles:
+    - role: geerlingguy.jenkins
+      become: true
+
