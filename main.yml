@@ -1,6 +1,5 @@
 ---
-
-
+      
 - name: Installing packages
   hosts: all
   tasks:
@@ -24,9 +23,32 @@
       - python3-apt
       - python-pip
       - virtualenv
-      - docker
+      - mysql-client
+      - default-libmysqlclient-dev
     become: yes
 
+
+- name: Install docker
+  hosts: all
+  tasks:
+    - name: "Add docker hug gpg key"
+      apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+        state: present
+      become: yes
+
+    - name: "Add dockerhub repository"
+      apt_repository: 
+        repo: deb [arch=amd64] https://download.docker.com/linux/debian/ stretch stable
+        state: present
+      become: yes
+    
+    - name: "Install docker"
+      package: 
+        name: docker-ce
+        state: present
+      become: yes
+  
 - name: Installing jenkins
   hosts: all
   vars:
@@ -43,9 +65,13 @@
 - name: Initialization of services hosted by docker
   hosts: all
   tasks:
-    - name: "Installing required docker apis (pip)"
+    - name: "Installing required packages for services creation (pip)"
       pip:
-        name: docker-py
+        name: "{{ item }}"
+      with_items:
+        - docker-py
+        - MySQL-python
+      become: yes
 
     - name: "Downloaded docker images"
       docker_image:
@@ -54,14 +80,78 @@
         - selenium/hub
         - linuxserver/piwigo
         - owncloud
+      become: yes
 
-    - name: "Creating containers"
+    - name: "Creating selenium hub container"
       docker_container:
         name: selenium-hub
-        image: selenium-hub
+        image: selenium/hub
         state: started
         recreate: yes
         restart: yes
         published_ports:
           - "4444:4444"
+      become: yes
+
+    - user: 
+        name: service-mysql
+        comment: "Mysql service user"
+        uid: 1041
+      become: yes
+    - name: "Creating a mysql container"
+      docker_container:
+        name: mysql
+        image: mysql
+        state: started
+        recreate: yes
+        restart: yes
+        env:
+            MYSQL_ROOT_PASSWORD: secret_pwd
+        published_ports:
+          - "3306:3306"
+      become: yes
+
+    - user: 
+        name: service-photos
+        comment: "Piwigo service user"
+        uid: 1040
+      become: yes
+
+    - mysql_db:
+        login_host: 127.0.0.1
+        login_user: root
+        login_password: secret_pwd
+        login_port: 3306
+        name: service-photos
+        state: present
+    - name: "Creating piwigo container"
+      docker_container:
+        name: photos-server
+        image: linuxserver/piwigo
+        state: started
+        recreate: yes
+        restart: yes
+        env:
+            PGID: 1040
+            PUID: 1040
+            TZ: "UTC"
+        links:
+          - "mysql:piwigo_mysql"
+        published_ports:
+          - "8010:80"
+        volumes:
+          - /home/service-photos/data:/config
+          - /etc/localtime:/etc/localtime:ro 
+      become: yes
+
+    - name: "Creating owncloud container"
+      docker_container:
+        name: storage-server
+        image: owncloud
+        state: started
+        recreate: yes
+        restart: yes
+        published_ports:
+          - "8011:80"
+      become: yes
 
