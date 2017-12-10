@@ -79,7 +79,7 @@
       with_items:
         - selenium/hub
         - linuxserver/piwigo
-        - owncloud
+        - nextcloud
       become: yes
 
     - name: "Creating selenium hub container"
@@ -124,6 +124,12 @@
         login_port: 3306
         name: service-photos
         state: present
+      retries: 5
+      delay: 4
+      register: result
+      until: result|succeeded
+      ignore_errors: yes
+
     - name: "Creating piwigo container"
       docker_container:
         name: photos-server
@@ -144,14 +150,32 @@
           - /etc/localtime:/etc/localtime:ro 
       become: yes
 
-    - name: "Creating owncloud container"
+    - mysql_db:
+        login_host: 127.0.0.1
+        login_user: root
+        login_password: secret_pwd
+        login_port: 3306
+        name: service-nextcloud
+        state: present
+
+    - user: 
+        name: service-storage
+        comment: "Nextcloud service user"
+        uid: 1042
+      become: yes
+
+    - name: "Creating nextcloud container"
       docker_container:
         name: storage-server
-        image: owncloud
+        image: nextcloud
         state: started
         recreate: yes
         restart: yes
         published_ports:
           - "8011:80"
+        links:
+          - "mysql:nextcloud_mysql"
+        volumes:
+          - /home/service-storage/data:/var/www/html 
       become: yes
 
