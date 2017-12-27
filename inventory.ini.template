@@ -7,14 +7,18 @@ host_name=
 version_jenkins=
 port_mysql=
 port_photos=
-port_nexctloud=
+port_nextcloud=
 port_jenkins=
                                         
 user_piwigo=
 user_mysql=
-user_nexcloud=
+user_nextcloud=
 user_jenkins=
 password_jenkins=
 password_mysql_root=
 
+path_nextcloud_data=
+path_photos_pictures=
+path_photos_config=
+path_mysql_data=
 

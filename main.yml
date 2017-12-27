@@ -100,10 +100,25 @@
       become: yes
 
     - user: 
-        name: service-mysql
+        name: "{{ user_mysql }}"
         comment: "Mysql service user"
         uid: 1041
       become: yes
+
+    - name: "Prepare volume creation for mysql"
+      file: path="{{ path_mysql_data }}" state=directory
+      become: yes
+
+    - name: "Creating mysql volume if not present"
+      docker_volume:
+        name: data_mysql
+        state: present
+        driver_options:
+          type: none
+          device: "{{ path_mysql_data }}"
+          o: bind
+      become: yes
+
     - name: "Creating a mysql container"
       docker_container:
         name: mysql
@@ -112,9 +127,11 @@
         recreate: yes
         restart: yes
         env:
-            MYSQL_ROOT_PASSWORD: secret_pwd
+            MYSQL_ROOT_PASSWORD: "{{ password_mysql_root }}"
         published_ports:
-          - "3306:3306"
+          - "{{ port_mysql }}:3306"
+        volumes:
+          - "data_mysql:/var/lib/mysql"
       become: yes
 
     - user: 
@@ -126,8 +143,8 @@
     - mysql_db:
         login_host: 127.0.0.1
         login_user: root
-        login_password: secret_pwd
-        login_port: 3306
+        login_password: "{{ password_mysql_root }}"
+        login_port:  "{{ port_mysql }}"
         name: service-photos
         state: present
       retries: 5
@@ -135,6 +152,34 @@
       register: result
       until: result|succeeded
       ignore_errors: yes
+    
+    - name: "Prepare volume creation"
+      file: path="{{ path_photos_pictures }}" state=directory
+      become: yes
+
+    - name: "Prepare volume creation"
+      file: path="{{ path_photos_config }}" state=directory
+      become: yes
+
+    - name: "Creating piwigo volume if not present"
+      docker_volume:
+        name: data_photos_pictures
+        state: present
+        driver_options:
+          type: none
+          device: "{{ path_photos_pictures }}"
+          o: bind
+      become: yes
+
+    - name: "Creating piwigo volume for config if not present"
+      docker_volume:
+        name: data_photos_config
+        state: present
+        driver_options:
+          type: none
+          device: "{{ path_photos_config }}"
+          o: bind
+      become: yes
 
     - name: "Creating piwigo container"
       docker_container:
@@ -150,24 +195,39 @@
         links:
           - "mysql:piwigo_mysql"
         published_ports:
-          - "8010:80"
+          - "{{ port_photos }}:80"
         volumes:
-          - /home/service-photos/data:/config
+          - "data_photos_config:/config"
+          - "data_photos_photos:/pictures"
           - /etc/localtime:/etc/localtime:ro 
       become: yes
-
+    
     - mysql_db:
         login_host: 127.0.0.1
         login_user: root
-        login_password: secret_pwd
-        login_port: 3306
+        login_password:  "{{ password_mysql_root }}"
+        login_port:  "{{ port_mysql }}"
         name: service-nextcloud
         state: present
 
+    - name: "Prepare volume creation for nextcloud"
+      file: path="{{ path_nextcloud_data }}" state=directory
+      become: yes
+
     - user: 
-        name: service-storage
+        name: '{{ user_nextcloud }}'
         comment: "Nextcloud service user"
         uid: 1042
+      become: yes
+    
+    - name: "Creating nextcloud volume if not present"
+      docker_volume:
+        name: data_nextcloud
+        state: present
+        driver_options:
+          type: none
+          device: "{{ path_nextcloud_data }}"
+          o: bind
       become: yes
 
     - name: "Creating nextcloud container"
@@ -178,10 +238,10 @@
         recreate: yes
         restart: yes
         published_ports:
-          - "8011:80"
+          - "{{ port_nextcloud }}:80"
         links:
           - "mysql:nextcloud_mysql"
         volumes:
-          - /home/service-storage/data:/var/www/html 
+          - data_nextcloud:/var/www/html 
       become: yes
 
