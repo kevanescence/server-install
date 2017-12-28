@@ -1,5 +1,6 @@
-roles/
+roles/*
 .vagrant
 main.retry
 inventory.ini
 *.swp
+!roles/reverseproxy

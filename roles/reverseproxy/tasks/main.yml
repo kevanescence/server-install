@@ -1,0 +1,6 @@
+- name: "create virtual host file"
+  template: src=vhosts.conf dest=/etc/apache2/sites-available/{{ item.public_url }}.conf
+  vars:
+    domain: "{{ item }}"
+  with_items: "{{ domains }}"
+  become: yes

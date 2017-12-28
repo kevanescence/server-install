@@ -245,3 +245,12 @@
           - data_nextcloud:/var/www/html 
       become: yes
 
+    - name: "Creating subdomains"
+      apache2_module:
+        state: present
+        name: proxy_http
+
+- name: "create virtual host file"
+  hosts: all
+  roles:
+    - reverseproxy
