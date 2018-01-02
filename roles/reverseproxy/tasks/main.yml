@@ -1,6 +1,23 @@
+- name: "Creating subdomains"
+  apache2_module:
+    state: present
+    name: proxy_http
+  become: yes
+
 - name: "create virtual host file"
   template: src=vhosts.conf dest=/etc/apache2/sites-available/{{ item.public_url }}.conf
   vars:
     domain: "{{ item }}"
   with_items: "{{ domains }}"
   become: yes
+
+- name: "Change hosts file for local dev"
+  lineinfile:
+    dest: /etc/hosts
+    regexp: "{{ item.public_url }}"
+    line: "127.0.0.1 {{ item.public_url}}"
+  when: "'localdomain'|lower in item.public_url"
+  with_items: "{{ domains }}"
+  ignore_errors: True
+  become: yes
+

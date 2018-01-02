@@ -1,8 +1,9 @@
 []
-127.0.0.1:2222
+127.0.0.1 ansible_ssh_port=
 
 
 [:vars]
+initial_data=
 host_name=
 version_jenkins=
 port_mysql=
@@ -25,4 +26,5 @@ path_mysql_data=
 domain_photos=
 domain_cloud=
 
+domains=
 

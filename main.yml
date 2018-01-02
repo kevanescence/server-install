@@ -5,6 +5,7 @@
     - hostname:
         name: "{{ host_name }}"
       become: yes
+
       
 - name: Installing packages
   hosts: all
@@ -31,6 +32,7 @@
       - virtualenv
       - mysql-client
       - default-libmysqlclient-dev
+      - acl
     become: yes
 
 
@@ -108,7 +110,12 @@
     - name: "Prepare volume creation for mysql"
       file: path="{{ path_mysql_data }}" state=directory
       become: yes
-
+    
+    # First iteration would fail without that.
+    - name: "Workaround to create empty volume"
+      shell: "docker volume create"
+      become: yes
+        
     - name: "Creating mysql volume if not present"
       docker_volume:
         name: data_mysql
@@ -245,12 +252,91 @@
           - data_nextcloud:/var/www/html 
       become: yes
 
-    - name: "Creating subdomains"
-      apache2_module:
-        state: present
-        name: proxy_http
-
 - name: "create virtual host file"
   hosts: all
   roles:
     - reverseproxy
+
+- name: "Copy existing photos data"
+  hosts: balin
+  tasks:
+    
+    # Only set authorization if we are on development mode
+    - name: Set authorized key took from file
+      authorized_key:
+        user: "{{ansible_ssh_user}}"
+        state: present
+        key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_rsa.pub') }}"
+      when:
+        - ansible_ssh_user == "vagrant"
+      become: yes
+
+    - name: ""
+      remote_user: "{{ansible_ssh_user}}"
+      synchronize:
+        mode: push
+        src: "{{initial_data}}/photos/"
+        dest: "{{ansible_ssh_user}}@{{inventory_hostname}}:/home/{{user_piwigo}}/config/www/gallery"
+        recursive: yes
+        rsync_path: "sudo rsync --rsh 'ssh -S none -o StrictHostKeyChecking=no -o Port={{ansible_ssh_port}}'"
+        rsync_opts:
+          - "--exclude=_data"
+      become: yes
+
+    - name: "Setting right owner"
+      file: dest="/home/{{user_piwigo}}/config" owner={{user_piwigo}} group={{user_piwigo}} mode=0770 recurse=yes
+      become: yes
+
+    - name: "Copy piwigo sql data file"
+      copy:
+        src: "{{initial_data}}/piwigo.sql"
+        dest: "/home/{{user_piwigo}}/piwigo.sql"
+        owner: '{{user_piwigo}}'
+        group: '{{user_piwigo}}'
+        mode: 0770
+      become: yes
+
+    - name: "Create mysql databases"
+      mysql_db:
+        login_host: 127.0.0.1
+        login_user: root
+        login_password: "{{ password_mysql_root }}"
+        login_port:  "{{ port_mysql }}"
+        name: service-photos
+        state: import
+        target: '/home/{{user_piwigo}}/piwigo.sql'
+      become: yes
+
+    - name: "Changing piwigo credentials (db name)"
+      replace:
+        path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
+        regexp: "conf\\['db_base'\\] = .*$"
+        replace: "conf['db_base'] = 'service-photos';"
+        backup: yes
+      become: yes
+
+    - name: "Changing piwigo credentials (db user)"
+      replace:
+        path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
+        regexp: "conf\\['db_user'\\] = .*$"
+        replace: "conf['db_user'] = 'root';"
+        backup: yes
+      become: yes
+
+    - name: "Changing piwigo credentials (db host)"
+      replace:
+        path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
+        regexp: "conf\\['db_host'\\] = .*$"
+        replace: "conf['db_host'] = 'piwigo_mysql';"
+        backup: yes
+      become: yes
+
+    - name: "Changing piwigo credentials (db password)"
+      replace:
+        path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
+        regexp: "conf\\['db_password'\\] = .*$"
+        replace: "conf['db_password'] = 'secret_pwd';"
+        backup: yes
+      become: yes
+
+
