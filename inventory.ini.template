@@ -1,7 +1,6 @@
 []
 127.0.0.1 ansible_ssh_port=
 
-
 [:vars]
 initial_data=
 host_name=
@@ -17,6 +16,10 @@ user_nextcloud=
 user_jenkins=
 password_jenkins=
 password_mysql_root=
+password_mysql_piwigo=
+password_mysql_nextcloud=
+password_nextcloud_admin=
+user_nextcloud_admin=
 
 path_nextcloud_data=
 path_photos_pictures=

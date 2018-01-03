@@ -1,11 +1,4 @@
 ---
-- name: Changing hostame
-  hosts: all
-  tasks:
-    - hostname:
-        name: "{{ host_name }}"
-      become: yes
-
       
 - name: Installing packages
   hosts: all
@@ -33,8 +26,61 @@
       - mysql-client
       - default-libmysqlclient-dev
       - acl
+      - firewalld
     become: yes
 
+- name: Several global administration tasks
+  hosts: all
+  tasks:
+    - hostname:
+        name: "{{ host_name }}"
+      become: yes
+
+    - name: Remove Root SSH Configuration
+      file: path=/root/.ssh state=absent
+      sudo: yes
+
+    - name: Remove root ssh login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin no'
+      become: yes
+
+    - name: Remove password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      become: yes
+
+    - name: Remove password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^X11Forwarding'
+        line: 'X11Forwarding no'
+      become: yes
+
+    - name: Reload sshd condig
+      command: service ssh reload
+      become: yes
+
+    #- firewalld: port=2223-65535/tcp permanent=true state=enabled
+    #  become: yes
+
+    #- name: "Allow HTTPS"
+    #  firewalld:
+    #    service: https
+    #    permanent: true
+    #    state: enabled
+    #  become: yes
+
+    #- name: "Allow HTTP"
+    #  firewalld:
+    #    service: https
+    #    permanent: true
+    #    state: enabled
+    #  become: yes
 
 - name: Install docker
   hosts: all
@@ -79,6 +125,7 @@
       with_items:
         - docker-py
         - MySQL-python
+        - firewalld
       become: yes
 
     - name: "Downloaded docker images"
@@ -95,6 +142,7 @@
         name: selenium-hub
         image: selenium/hub
         state: started
+        restart_policy: unless-stopped
         recreate: yes
         restart: yes
         published_ports:
@@ -131,6 +179,7 @@
         name: mysql
         image: mysql
         state: started
+        restart_policy: unless-stopped
         recreate: yes
         restart: yes
         env:
@@ -194,6 +243,7 @@
         image: linuxserver/piwigo
         state: started
         recreate: yes
+        restart_policy: unless-stopped
         restart: yes
         env:
             PGID: 1040
@@ -214,8 +264,20 @@
         login_user: root
         login_password:  "{{ password_mysql_root }}"
         login_port:  "{{ port_mysql }}"
-        name: service-nextcloud
+        name: "{{user_nextcloud}}"
         state: present
+
+    - name: "Create mysql user for nextcloud service"
+      mysql_user:
+        login_host: 127.0.0.1
+        login_user: root
+        login_password: "{{ password_mysql_root }}"
+        login_port:  "{{ port_mysql }}"
+        name: '{{ user_nextcloud }}'
+        password: "{{ password_mysql_nextcloud }}"
+        priv: '{{user_nextcloud}}.*:ALL,GRANT'
+        state: present
+        host: '172.17.0.%'
 
     - name: "Prepare volume creation for nextcloud"
       file: path="{{ path_nextcloud_data }}" state=directory
@@ -242,8 +304,17 @@
         name: storage-server
         image: nextcloud
         state: started
+        restart_policy: unless-stopped
         recreate: yes
         restart: yes
+        env:
+          NEXTCLOUD_ADMIN_USER: "{{user_nextcloud_admin}}"
+          NEXTCLOUD_ADMIN_PASSWORD: "{{password_nextcloud_admin}}"
+          MYSQL_DATABASE: "{{user_nextcloud}}"
+          MYSQL_USER: "{{user_nextcloud}}"
+          MYSQL_PASSWORD: "{{ password_mysql_nextcloud }}"
+          MYSQL_HOST: "nextcloud_mysql"
+
         published_ports:
           - "{{ port_nextcloud }}:80"
         links:
@@ -271,7 +342,7 @@
         - ansible_ssh_user == "vagrant"
       become: yes
 
-    - name: ""
+    - name: "Copy existing photos data"
       remote_user: "{{ansible_ssh_user}}"
       synchronize:
         mode: push
@@ -302,16 +373,28 @@
         login_user: root
         login_password: "{{ password_mysql_root }}"
         login_port:  "{{ port_mysql }}"
-        name: service-photos
+        name: '{{user_piwigo}}'
         state: import
         target: '/home/{{user_piwigo}}/piwigo.sql'
       become: yes
+
+    - name: "Create mysql user for piwigo service"
+      mysql_user:
+        login_host: 127.0.0.1
+        login_user: root
+        login_password: "{{ password_mysql_root }}"
+        login_port:  "{{ port_mysql }}"
+        name: '{{ user_piwigo }}'
+        password: "{{ password_mysql_piwigo }}"
+        priv: '{{user_piwigo}}.*:ALL,GRANT'
+        state: present
+        host: '172.17.0.%'
 
     - name: "Changing piwigo credentials (db name)"
       replace:
         path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
         regexp: "conf\\['db_base'\\] = .*$"
-        replace: "conf['db_base'] = 'service-photos';"
+        replace: "conf['db_base'] = '{{user_piwigo}}';"
         backup: yes
       become: yes
 
@@ -319,7 +402,7 @@
       replace:
         path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
         regexp: "conf\\['db_user'\\] = .*$"
-        replace: "conf['db_user'] = 'root';"
+        replace: "conf['db_user'] = '{{user_piwigo}}';"
         backup: yes
       become: yes
 
@@ -335,8 +418,7 @@
       replace:
         path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
         regexp: "conf\\['db_password'\\] = .*$"
-        replace: "conf['db_password'] = 'secret_pwd';"
+        replace: "conf['db_password'] = '{{ password_mysql_piwigo }}';"
         backup: yes
       become: yes
-
 
