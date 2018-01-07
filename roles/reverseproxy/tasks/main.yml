@@ -11,6 +11,17 @@
   with_items: "{{ domains }}"
   become: yes
 
+- name: "Enable sites"
+  shell: "a2ensite {{ item.public_url }}.conf"
+  with_items: "{{ domains }}"
+  become: yes
+
+- name: "Reload apache2 configuration"
+  service:
+    name: apache2
+    state: reloaded
+  become: yes
+
 - name: "Change hosts file for local dev"
   lineinfile:
     dest: /etc/hosts

@@ -20,12 +20,15 @@
       - openjdk-8-jdk
       - python
       - python-apt
+      - python-dev
       - python3-apt
+      - python3-dev
       - python-pip
       - virtualenv
       - mysql-client
       - default-libmysqlclient-dev
       - acl
+      - gcc
       - firewalld
     become: yes
 
@@ -125,7 +128,6 @@
       with_items:
         - docker-py
         - MySQL-python
-        - firewalld
       become: yes
 
     - name: "Downloaded docker images"
