@@ -1,0 +1,189 @@
+- name: "Downloading docker images"
+  docker_image:
+    name: "{{ item }}"
+  with_items:
+    - selenium/hub
+    - linuxserver/piwigo
+    - nextcloud:12
+    - nextcloud:13
+    - nextcloud:14
+    - nextcloud:15
+  become: yes
+
+
+- user:
+    name: "{{ user_mysql }}"
+    comment: "Mysql service user"
+    uid: 1041
+  become: yes
+
+- name: "Prepare volume creation for mysql"
+  file: path="{{ path_mysql_data }}" state=directory
+  become: yes
+
+# First iteration would fail without that.
+- name: "Workaround to create empty volume"
+  shell: "docker volume create"
+  become: yes
+
+- name: "Creating mysql volume if not present"
+  docker_volume:
+    name: data_mysql
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_mysql_data }}"
+      o: bind
+  become: yes
+
+- name: "Creating a mysql container"
+  docker_container:
+    name: mysql
+    image: mysql:5.7
+    state: started
+    restart_policy: unless-stopped
+    recreate: yes
+    restart: yes
+    env:
+        MYSQL_ROOT_PASSWORD: "{{ password_mysql_root }}"
+    published_ports:
+      - "127.0.0.1:{{ port_mysql }}:3306"
+    volumes:
+      - "data_mysql:/var/lib/mysql"
+  become: yes
+
+- user:
+    name: service-photos
+    comment: "Piwigo service user"
+    uid: 1040
+  become: yes
+
+- mysql_db:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password: "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: service-photos
+    state: present
+  retries: 5
+  delay: 4
+  register: result
+  until: result|succeeded
+  ignore_errors: yes
+
+- name: "Prepare volume creation"
+  file: path="{{ path_photos_pictures }}" state=directory
+  become: yes
+
+- name: "Prepare volume creation"
+  file: path="{{ path_photos_config }}" state=directory
+  become: yes
+
+- name: "Creating piwigo volume if not present"
+  docker_volume:
+    name: data_photos_pictures
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_photos_pictures }}"
+      o: bind
+  become: yes
+
+- name: "Creating piwigo volume for config if not present"
+  docker_volume:
+    name: data_photos_config
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_photos_config }}"
+      o: bind
+  become: yes
+
+- name: "Creating piwigo container"
+  docker_container:
+    name: photos-server
+    image: linuxserver/piwigo
+    state: started
+    recreate: yes
+    restart_policy: unless-stopped
+    restart: yes
+    env:
+        PGID: 1040
+        PUID: 1040
+        TZ: "UTC"
+    links:
+      - "mysql:piwigo_mysql"
+    published_ports:
+      - "{{ port_photos }}:80"
+    volumes:
+      - "data_photos_config:/config"
+      - "data_photos_photos:/pictures"
+      - /etc/localtime:/etc/localtime:ro
+  become: yes
+
+- mysql_db:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password:  "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: "{{user_nextcloud}}"
+    state: present
+
+- name: "Create mysql user for nextcloud service"
+  mysql_user:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password: "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: '{{ user_nextcloud }}'
+    password: "{{ password_mysql_nextcloud }}"
+    priv: '{{user_nextcloud}}.*:ALL,GRANT'
+    state: present
+    host: '172.17.0.%'
+
+- name: "Prepare volume creation for nextcloud"
+  file: path="{{ path_nextcloud_data }}" state=directory
+  become: yes
+
+- user:
+    name: '{{ user_nextcloud }}'
+    comment: "Nextcloud service user"
+    uid: 1042
+  become: yes
+
+- name: "Creating nextcloud volume if not present"
+  docker_volume:
+    name: data_nextcloud
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_nextcloud_data }}"
+      o: bind
+  become: yes
+
+- name: "Creating nextcloud container"
+  docker_container:
+    name: storage-server
+    image: "nextcloud:{{item}}"
+    state: started
+
+    restart_policy: unless-stopped
+    recreate: yes
+    restart: yes
+    env:
+      NEXTCLOUD_ADMIN_USER: "{{user_nextcloud_admin}}"
+      NEXTCLOUD_ADMIN_PASSWORD: "{{password_nextcloud_admin}}"
+      MYSQL_DATABASE: "{{user_nextcloud}}"
+      MYSQL_USER: "{{user_nextcloud}}"
+      MYSQL_PASSWORD: "{{ password_mysql_nextcloud }}"
+      MYSQL_HOST: "nextcloud_mysql"
+
+    published_ports:
+      - "{{ port_nextcloud }}:80"
+    links:
+      - "mysql:nextcloud_mysql"
+    volumes:
+      - data_nextcloud:/var/www/html
+  loop: "{{ range(12,13)|list }}"
+
+  become: yes

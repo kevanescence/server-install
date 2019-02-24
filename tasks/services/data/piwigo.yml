@@ -1,0 +1,55 @@
+- name: "Copy existing photos data"
+  remote_user: "{{ansible_ssh_user}}"
+  synchronize:
+    mode: push
+    src: "{{initial_data}}/photos/"
+    dest: "{{ansible_ssh_user}}@{{inventory_hostname}}:/home/{{user_piwigo}}/config/www/gallery"
+    recursive: yes
+    rsync_path: "sudo rsync --rsh 'ssh -S none -o StrictHostKeyChecking=no -o Port={{ansible_ssh_port}}'"
+    rsync_opts:
+      - "--exclude=_data"
+  become: yes
+
+- name: "Setting ownership"
+  file: dest="/home/{{user_piwigo}}/config" owner={{user_piwigo}} group={{user_piwigo}} mode=0770 recurse=yes
+  become: yes
+
+- name: "Copy piwigo sql data file"
+  copy:
+    src: "{{initial_data}}/piwigo.sql"
+    dest: "/home/{{user_piwigo}}/piwigo.sql"
+    owner: '{{user_piwigo}}'
+    group: '{{user_piwigo}}'
+    mode: 0770
+    force: yes
+  become: yes
+
+- name: "Retrieving date of existing piwigo DB dump"
+  shell: grep "Dump completed on" "/home/{{user_piwigo}}/piwigo.sql"|tail -1 |awk -F 'on ' '{print $2}'
+  register: piwigo_sqldump_lookup
+  become: yes
+  ignore_errors:  no
+
+- fail:
+    msg: "Did not find any dump information (Looking for Dump completed on) in remote /home/{{user_piwigo}}/piwigo.sql file"
+  when: piwigo_sqldump_lookup.stdout == ''
+
+- debug: msg="{{piwigo_sqldump_lookup}}"
+
+- name: "Retrieving last modification date of existing piwigo SQL tables"
+  command: mysql -h 127.0.0.1 -u root -p{{ password_mysql_root }} {{user_piwigo}} -Ns -e "{{sql}}"
+  vars:
+    sql: "SELECT UPDATE_TIME FROM information_schema.tables where  `table_name` like 'piwigo%' order by UPDATE_TIME desc  limit 1;"
+  register: piwigo_table_last_modified_lookup
+
+- name: "Create mysql database for piwigo"
+  mysql_db:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password: "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: '{{user_piwigo}}'
+    state: import
+    target: '/home/{{user_piwigo}}/piwigo.sql'
+  when: piwigo_sqldump_lookup.stdout > piwigo_table_last_modified_lookup.stdout
+  become: yes

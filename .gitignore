@@ -3,5 +3,7 @@ roles/*
 main.retry
 inventory.ini
 inventory.ini.vagrant
+inventory.ini.prod
+.idea/*
 *.swp
 !roles/reverseproxy

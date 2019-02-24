@@ -1,72 +1,22 @@
 ---
       
-- name: Installing packages
+- name: Installing system packages
   hosts: all
   tasks:
-  - name: Install package https provider
-    package:
-      name: apt-transport-https
-      state: latest
-    become: yes
-
-  - name: install some packages
-    package:
-      name: "{{ item }}"
-      state: latest
-    with_items:
-      - curl
-      - git
-      - apache2
-      - openjdk-8-jdk
-      - python
-      - python-apt
-      - python-dev
-      - python3-apt
-      - python3-dev
-      - python-pip
-      - virtualenv
-      - mysql-client
-      - default-libmysqlclient-dev
-      - acl
-      - gcc
-      - firewalld
-    become: yes
+    - import_tasks: tasks/install_dependencies.yml
+      tags:
+        - system
 
 - name: Several global administration tasks
   hosts: all
   tasks:
-    - hostname:
-        name: "{{ host_name }}"
-      become: yes
+    - import_tasks: tasks/global_administration.yml
+      vars:
+        hostname: "{{ host_name }}"
+      tags:
+        - system
 
-    - name: Remove Root SSH Configuration
-      file: path=/root/.ssh state=absent
-      sudo: yes
 
-    - name: Remove root ssh login
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^PermitRootLogin'
-        line: 'PermitRootLogin no'
-      become: yes
-
-    - name: Remove password authentication
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^PasswordAuthentication'
-        line: 'PasswordAuthentication no'
-      become: yes
-
-    - name: Remove password authentication
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^X11Forwarding'
-        line: 'X11Forwarding no'
-      become: yes
-
-    - name: Reload sshd condig
-      command: service ssh reload
-      become: yes
 
     #- firewalld: port=2223-65535/tcp permanent=true state=enabled
     #  become: yes
@@ -84,29 +34,8 @@
     #    permanent: true
     #    state: enabled
     #  become: yes
-
-- name: Install docker
-  hosts: all
-  tasks:
-    - name: "Add docker hug gpg key"
-      apt_key:
-        url: https://download.docker.com/linux/debian/gpg
-        state: present
-      become: yes
-
-    - name: "Add dockerhub repository"
-      apt_repository: 
-        repo: deb [arch=amd64] https://download.docker.com/linux/debian/ stretch stable
-        state: present
-      become: yes
-    
-    - name: "Install docker"
-      package: 
-        name: docker-ce
-        state: present
-      become: yes
   
-- name: Installing jenkins
+- name: Installing Jenkins
   hosts: all
   vars:
     jenkins_version: '{{ version_jenkins }}'
@@ -118,309 +47,26 @@
   roles:
     - role: geerlingguy.jenkins
       become: true
+  tasks:
+    - import_tasks: tasks/install_dev_tools.yml
+  tags:
+    - development
 
-- name: Initialization of services hosted by docker
+- name: "Creating services"
   hosts: all
   tasks:
-    - name: "Installing required packages for services creation (pip)"
-      pip:
-        name: "{{ item }}"
-      with_items:
-        - docker-py
-        - MySQL-python
-      become: yes
+    - import_tasks: tasks/install_services.yml
+  tags:
+    - services
 
-    - name: "Downloaded docker images"
-      docker_image:
-        name: "{{ item }}"
-      with_items:
-        - selenium/hub
-        - linuxserver/piwigo
-        - nextcloud
-      become: yes
-
-    - name: "Creating selenium hub container"
-      docker_container:
-        name: selenium-hub
-        image: selenium/hub
-        state: started
-        restart_policy: unless-stopped
-        recreate: yes
-        restart: yes
-        published_ports:
-          - "4444:4444"
-      become: yes
-
-    - user: 
-        name: "{{ user_mysql }}"
-        comment: "Mysql service user"
-        uid: 1041
-      become: yes
-
-    - name: "Prepare volume creation for mysql"
-      file: path="{{ path_mysql_data }}" state=directory
-      become: yes
-    
-    # First iteration would fail without that.
-    - name: "Workaround to create empty volume"
-      shell: "docker volume create"
-      become: yes
-        
-    - name: "Creating mysql volume if not present"
-      docker_volume:
-        name: data_mysql
-        state: present
-        driver_options:
-          type: none
-          device: "{{ path_mysql_data }}"
-          o: bind
-      become: yes
-
-    - name: "Creating a mysql container"
-      docker_container:
-        name: mysql
-        image: mysql
-        state: started
-        restart_policy: unless-stopped
-        recreate: yes
-        restart: yes
-        env:
-            MYSQL_ROOT_PASSWORD: "{{ password_mysql_root }}"
-        published_ports:
-          - "{{ port_mysql }}:3306"
-        volumes:
-          - "data_mysql:/var/lib/mysql"
-      become: yes
-
-    - user: 
-        name: service-photos
-        comment: "Piwigo service user"
-        uid: 1040
-      become: yes
-
-    - mysql_db:
-        login_host: 127.0.0.1
-        login_user: root
-        login_password: "{{ password_mysql_root }}"
-        login_port:  "{{ port_mysql }}"
-        name: service-photos
-        state: present
-      retries: 5
-      delay: 4
-      register: result
-      until: result|succeeded
-      ignore_errors: yes
-    
-    - name: "Prepare volume creation"
-      file: path="{{ path_photos_pictures }}" state=directory
-      become: yes
-
-    - name: "Prepare volume creation"
-      file: path="{{ path_photos_config }}" state=directory
-      become: yes
-
-    - name: "Creating piwigo volume if not present"
-      docker_volume:
-        name: data_photos_pictures
-        state: present
-        driver_options:
-          type: none
-          device: "{{ path_photos_pictures }}"
-          o: bind
-      become: yes
-
-    - name: "Creating piwigo volume for config if not present"
-      docker_volume:
-        name: data_photos_config
-        state: present
-        driver_options:
-          type: none
-          device: "{{ path_photos_config }}"
-          o: bind
-      become: yes
-
-    - name: "Creating piwigo container"
-      docker_container:
-        name: photos-server
-        image: linuxserver/piwigo
-        state: started
-        recreate: yes
-        restart_policy: unless-stopped
-        restart: yes
-        env:
-            PGID: 1040
-            PUID: 1040
-            TZ: "UTC"
-        links:
-          - "mysql:piwigo_mysql"
-        published_ports:
-          - "{{ port_photos }}:80"
-        volumes:
-          - "data_photos_config:/config"
-          - "data_photos_photos:/pictures"
-          - /etc/localtime:/etc/localtime:ro 
-      become: yes
-    
-    - mysql_db:
-        login_host: 127.0.0.1
-        login_user: root
-        login_password:  "{{ password_mysql_root }}"
-        login_port:  "{{ port_mysql }}"
-        name: "{{user_nextcloud}}"
-        state: present
-
-    - name: "Create mysql user for nextcloud service"
-      mysql_user:
-        login_host: 127.0.0.1
-        login_user: root
-        login_password: "{{ password_mysql_root }}"
-        login_port:  "{{ port_mysql }}"
-        name: '{{ user_nextcloud }}'
-        password: "{{ password_mysql_nextcloud }}"
-        priv: '{{user_nextcloud}}.*:ALL,GRANT'
-        state: present
-        host: '172.17.0.%'
-
-    - name: "Prepare volume creation for nextcloud"
-      file: path="{{ path_nextcloud_data }}" state=directory
-      become: yes
-
-    - user: 
-        name: '{{ user_nextcloud }}'
-        comment: "Nextcloud service user"
-        uid: 1042
-      become: yes
-    
-    - name: "Creating nextcloud volume if not present"
-      docker_volume:
-        name: data_nextcloud
-        state: present
-        driver_options:
-          type: none
-          device: "{{ path_nextcloud_data }}"
-          o: bind
-      become: yes
-
-    - name: "Creating nextcloud container"
-      docker_container:
-        name: storage-server
-        image: nextcloud
-        state: started
-        restart_policy: unless-stopped
-        recreate: yes
-        restart: yes
-        env:
-          NEXTCLOUD_ADMIN_USER: "{{user_nextcloud_admin}}"
-          NEXTCLOUD_ADMIN_PASSWORD: "{{password_nextcloud_admin}}"
-          MYSQL_DATABASE: "{{user_nextcloud}}"
-          MYSQL_USER: "{{user_nextcloud}}"
-          MYSQL_PASSWORD: "{{ password_mysql_nextcloud }}"
-          MYSQL_HOST: "nextcloud_mysql"
-
-        published_ports:
-          - "{{ port_nextcloud }}:80"
-        links:
-          - "mysql:nextcloud_mysql"
-        volumes:
-          - data_nextcloud:/var/www/html 
-      become: yes
-
-- name: "create virtual host file"
-  hosts: all
-  roles:
-    - reverseproxy
-
-- name: "Copy existing photos data"
+- name: "Importing data and configuring services"
   hosts: balin
   tasks:
-    
-    # Only set authorization if we are on development mode
-    - name: Set authorized key took from file
-      authorized_key:
-        user: "{{ansible_ssh_user}}"
-        state: present
-        key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_rsa.pub') }}"
-      when:
-        - ansible_ssh_user == "vagrant"
-      become: yes
-
-    - name: "Copy existing photos data"
-      remote_user: "{{ansible_ssh_user}}"
-      synchronize:
-        mode: push
-        src: "{{initial_data}}/photos/"
-        dest: "{{ansible_ssh_user}}@{{inventory_hostname}}:/home/{{user_piwigo}}/config/www/gallery"
-        recursive: yes
-        rsync_path: "sudo rsync --rsh 'ssh -S none -o StrictHostKeyChecking=no -o Port={{ansible_ssh_port}}'"
-        rsync_opts:
-          - "--exclude=_data"
-      become: yes
-
-    - name: "Setting right owner"
-      file: dest="/home/{{user_piwigo}}/config" owner={{user_piwigo}} group={{user_piwigo}} mode=0770 recurse=yes
-      become: yes
-
-    - name: "Copy piwigo sql data file"
-      copy:
-        src: "{{initial_data}}/piwigo.sql"
-        dest: "/home/{{user_piwigo}}/piwigo.sql"
-        owner: '{{user_piwigo}}'
-        group: '{{user_piwigo}}'
-        mode: 0770
-      become: yes
-
-    - name: "Create mysql databases"
-      mysql_db:
-        login_host: 127.0.0.1
-        login_user: root
-        login_password: "{{ password_mysql_root }}"
-        login_port:  "{{ port_mysql }}"
-        name: '{{user_piwigo}}'
-        state: import
-        target: '/home/{{user_piwigo}}/piwigo.sql'
-      become: yes
-
-    - name: "Create mysql user for piwigo service"
-      mysql_user:
-        login_host: 127.0.0.1
-        login_user: root
-        login_password: "{{ password_mysql_root }}"
-        login_port:  "{{ port_mysql }}"
-        name: '{{ user_piwigo }}'
-        password: "{{ password_mysql_piwigo }}"
-        priv: '{{user_piwigo}}.*:ALL,GRANT'
-        state: present
-        host: '172.17.0.%'
-
-    - name: "Changing piwigo credentials (db name)"
-      replace:
-        path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
-        regexp: "conf\\['db_base'\\] = .*$"
-        replace: "conf['db_base'] = '{{user_piwigo}}';"
-        backup: yes
-      become: yes
-
-    - name: "Changing piwigo credentials (db user)"
-      replace:
-        path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
-        regexp: "conf\\['db_user'\\] = .*$"
-        replace: "conf['db_user'] = '{{user_piwigo}}';"
-        backup: yes
-      become: yes
-
-    - name: "Changing piwigo credentials (db host)"
-      replace:
-        path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
-        regexp: "conf\\['db_host'\\] = .*$"
-        replace: "conf['db_host'] = 'piwigo_mysql';"
-        backup: yes
-      become: yes
-
-    - name: "Changing piwigo credentials (db password)"
-      replace:
-        path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
-        regexp: "conf\\['db_password'\\] = .*$"
-        replace: "conf['db_password'] = '{{ password_mysql_piwigo }}';"
-        backup: yes
-      become: yes
-
+  - import_tasks: tasks/services/data/piwigo.yml
+  - import_tasks: tasks/services/configuration/piwigo.yml
+  - import_tasks: tasks/services/data/nextcloud.yml
+  tags:
+    - services
+    - configuration
+  roles:
+  - reverseproxy

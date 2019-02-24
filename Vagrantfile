@@ -80,6 +80,8 @@ Vagrant.configure("2") do |config|
     ansible.playbook = "main.yml"
     ansible.inventory_path = "inventory.ini"
     ansible.limit = "all"
+    ansible.tags = "#{ENV['tags']}"
+
   end
 
 end

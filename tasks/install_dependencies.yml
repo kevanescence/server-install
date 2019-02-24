@@ -1,0 +1,49 @@
+- name: Install some packages
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - apt-transport-https
+    - curl
+    - git
+    - apache2
+    - openjdk-8-jdk
+    - python
+    - python-apt
+    - python-dev
+    - python3-apt
+    - python3-dev
+    - python-pip
+    - virtualenv
+    - mysql-client
+    - default-libmysqlclient-dev
+    - acl
+    - gcc
+    - firewalld
+  become: yes
+
+- name: "Docker - add docker hug gpg key"
+  apt_key:
+    url: https://download.docker.com/linux/debian/gpg
+    state: present
+  become: yes
+
+- name: "Docker - add dockerhub repository"
+  apt_repository:
+    repo: deb [arch=amd64] https://download.docker.com/linux/debian/ stretch stable
+    state: present
+  become: yes
+
+- name: "Docker - install docker"
+  package:
+    name: docker-ce
+    state: present
+  become: yes
+
+- name: "Installing required packages for services creation (pip)"
+  pip:
+    name: "{{ item }}"
+  with_items:
+    - docker-py
+    - MySQL-python
+  become: yes
