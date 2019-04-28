@@ -1,3 +1,8 @@
+- name: "Check if piwigo is already installed"
+  stat:
+    path: "/home/{{user_piwigo}}/"
+  register: is_piwigo_installed
+
 - name: "Copy existing photos data"
   remote_user: "{{ansible_ssh_user}}"
   synchronize:
@@ -9,6 +14,8 @@
     rsync_opts:
       - "--exclude=_data"
   become: yes
+  when: "is_piwigo_installed.stat.exists == False"
+
 
 - name: "Setting ownership"
   file: dest="/home/{{user_piwigo}}/config" owner={{user_piwigo}} group={{user_piwigo}} mode=0770 recurse=yes

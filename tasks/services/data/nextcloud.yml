@@ -1,17 +1,70 @@
-#- name: "Copy existing photos data"
-#  remote_user: "{{ansible_ssh_user}}"
-#  synchronize:
-#    mode: push
-#    src: "{{initial_data}}/nextcloud/"
-#    dest: "{{ansible_ssh_user}}@{{inventory_hostname}}:/home/{{user_nextcloud}}/config/www/gallery"
-#    recursive: yes
-#    rsync_path: "sudo rsync --rsh 'ssh -S none -o StrictHostKeyChecking=no -o Port={{ansible_ssh_port}}'"
-#    rsync_opts:
-#      - "--exclude=_data"
-#  become: yes
+- name: "Check if nextcloud is already installed"
+  stat:
+    path: "/home/{{user_nextcloud}}/"
+  register: is_nextcloud_installed
+
+
+- mysql_db:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password:  "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: "{{user_nextcloud}}"
+    state: present
+
+- name: "Create mysql user for nextcloud service"
+  mysql_user:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password: "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: '{{ user_nextcloud }}'
+    password: "{{ password_mysql_nextcloud }}"
+    priv: '{{user_nextcloud}}.*:ALL,GRANT'
+    state: present
+    host: '172.17.0.%'
+
+- name: "Copy existing nextcloud data"
+  remote_user: "{{ansible_ssh_user}}"
+  synchronize:
+    mode: push
+    src: "{{initial_data}}/nextcloud/"
+    dest: "{{ansible_ssh_user}}@{{inventory_hostname}}:/home/{{user_nextcloud}}/"
+    recursive: yes
+    rsync_path: "sudo rsync --rsh 'ssh -S none -o StrictHostKeyChecking=no -o Port={{ansible_ssh_port}}'"
+    rsync_opts:
+      - "--exclude=_data"
+  become: yes
+  when: "is_nextcloud_installed.stat.exists == False"
+
+
+- name: "Changing nextcloud credentials (db name)"
+  replace:
+    path: '/home/{{user_nextcloud}}/data/config/config.php'
+    regexp: "'dbname' => .*$"
+    replace: "'dbname' => '{{user_nextcloud}}',"
+    backup: yes
+  become: yes
+
+- name: "Changing nextcloud credentials (db user)"
+  replace:
+    path: '/home/{{user_nextcloud}}/data/config/config.php'
+    regexp: "'dbuser' => .*$"
+    replace: "'dbuser' => '{{user_nextcloud}}',"
+    backup: yes
+  become: yes
+
+- name: "Changing nextcloud credentials (db password)"
+  replace:
+    path: '/home/{{user_nextcloud}}/data/config/config.php'
+    regexp: "'dbpassword' => .*$"
+    replace: "'dbpassword' => '{{password_mysql_nextcloud}}',"
+    backup: yes
+  become: yes
+
 
 - name: "Setting ownership"
-  file: dest="/home/{{user_nextcloud}}/config" owner=root group=root mode=0770 recurse=yes
+  file: dest="/home/{{user_nextcloud}}/data" owner=www-data group=www-data mode=0771 recurse=yes
   become: yes
 
 - name: "Copy Nextcloud SQL data file"
@@ -34,15 +87,7 @@
     msg: "Did not find any dump information (Looking for Dump completed on) in remote /home/{{user_nextcloud}}/nextcloud.sql file"
   when: nextcloud_sqldump_lookup.stdout == ''
 
-- debug: msg="{{nextcloud_sqldump_lookup}}"
-
-- name: "Retrieving last modification date of existing nextcloud SQL tables"
-  command: mysql -h 127.0.0.1 -u root -p{{ password_mysql_root }} {{user_nextcloud}} -Ns -e "{{sql}}"
-  vars:
-    sql: "SELECT UPDATE_TIME FROM information_schema.tables where TABLE_NAME != 'authtoken' order by UPDATE_TIME desc limit 1;"
-  register: nextcloud_table_last_modified_lookup
-
-- name: "Create mysql database for Nextcloud"
+- name: "Importing existing mysql base for nextcloud"
   mysql_db:
     login_host: 127.0.0.1
     login_user: root
@@ -52,4 +97,34 @@
     state: import
     target: '/home/{{user_nextcloud}}/nextcloud.sql'
   when: nextcloud_sqldump_lookup.stdout > nextcloud_table_last_modified_lookup.stdout
+  become: yes
+
+- name: "Creating nextcloud container"
+  docker_container:
+    name: storage-server
+    image: "nextcloud:12"
+    state: started
+
+    restart_policy: unless-stopped
+    recreate: yes
+    restart: yes
+    env:
+      NEXTCLOUD_ADMIN_USER: "{{user_nextcloud_admin}}"
+      NEXTCLOUD_ADMIN_PASSWORD: "{{password_nextcloud_admin}}"
+      MYSQL_DATABASE: "{{user_nextcloud}}"
+      MYSQL_USER: "{{user_nextcloud}}"
+      MYSQL_PASSWORD: "{{ password_mysql_nextcloud }}"
+      MYSQL_HOST: "nextcloud_mysql"
+
+    published_ports:
+      - "{{ port_nextcloud }}:80"
+    links:
+      - "mysql:nextcloud_mysql"
+    volumes:
+      - data_nextcloud:/var/www/html
+
+  tags:
+    - upgrade
+
+
   become: yes
