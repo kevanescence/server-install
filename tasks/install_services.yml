@@ -52,11 +52,6 @@
       - "data_mysql:/var/lib/mysql"
   become: yes
 
-- user:
-    name: service-photos
-    comment: "Piwigo service user"
-    uid: 1040
-  become: yes
 
 - mysql_db:
     login_host: 127.0.0.1
@@ -71,75 +66,6 @@
   until: result|succeeded
   ignore_errors: yes
 
-- name: "Prepare volume creation"
-  file: path="{{ path_photos_pictures }}" state=directory
-  become: yes
-
-- name: "Prepare volume creation"
-  file: path="{{ path_photos_config }}" state=directory
-  become: yes
-
-- name: "Creating piwigo volume if not present"
-  docker_volume:
-    name: data_photos_pictures
-    state: present
-    driver_options:
-      type: none
-      device: "{{ path_photos_pictures }}"
-      o: bind
-  become: yes
-
-- name: "Creating piwigo volume for config if not present"
-  docker_volume:
-    name: data_photos_config
-    state: present
-    driver_options:
-      type: none
-      device: "{{ path_photos_config }}"
-      o: bind
-  become: yes
-
-- name: "Creating piwigo container"
-  docker_container:
-    name: photos-server
-    image: linuxserver/piwigo
-    state: started
-    recreate: yes
-    restart_policy: unless-stopped
-    restart: yes
-    env:
-        PGID: 1040
-        PUID: 1040
-        TZ: "UTC"
-    links:
-      - "mysql:piwigo_mysql"
-    published_ports:
-      - "{{ port_photos }}:80"
-    volumes:
-      - "data_photos_config:/config"
-      - "data_photos_photos:/pictures"
-      - /etc/localtime:/etc/localtime:ro
-  become: yes
 
 
-
-- name: "Prepare volume creation for nextcloud"
-  file: path="{{ path_nextcloud_data }}" state=directory
-  become: yes
-
-- user:
-    name: '{{ user_nextcloud }}'
-    comment: "Nextcloud service user"
-    uid: 1042
-  become: yes
-
-- name: "Creating nextcloud volume if not present"
-  docker_volume:
-    name: data_nextcloud
-    state: present
-    driver_options:
-      type: none
-      device: "{{ path_nextcloud_data }}"
-      o: bind
-  become: yes
 

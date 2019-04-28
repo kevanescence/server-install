@@ -35,22 +35,22 @@
     #    state: enabled
     #  become: yes
   
-- name: Installing Jenkins
-  hosts: all
-  vars:
-    jenkins_version: '{{ version_jenkins }}'
-    jenkins_package_state: "present"
-    jenkins_http_port: '{{ port_jenkins }}'
-    jenkins_admin_username: '{{ user_jenkins }}'
-    jenkins_admin_password: '{{ password_jenkins }}'
-    jenkins_plugins: ["cloverphp", "cobertura", "docker-workflow", "embeddable-build-status", "jdepend", "analysis-collector", "xunit", "violations"]
-  roles:
-    - role: geerlingguy.jenkins
-      become: true
-  tasks:
-    - import_tasks: tasks/install_dev_tools.yml
-  tags:
-    - development
+#- name: Installing Jenkins
+#  hosts: all
+#  vars:
+#    jenkins_version: '{{ version_jenkins }}'
+#    jenkins_package_state: "present"
+#    jenkins_http_port: '{{ port_jenkins }}'
+#    jenkins_admin_username: '{{ user_jenkins }}'
+#    jenkins_admin_password: '{{ password_jenkins }}'
+#    jenkins_plugins: ["cloverphp", "cobertura", "docker-workflow", "embeddable-build-status", "jdepend", "analysis-collector", "xunit", "violations"]
+#  roles:
+#    - role: geerlingguy.jenkins
+#      become: true
+#  tasks:
+#    - import_tasks: tasks/install_dev_tools.yml
+#  tags:
+#    - development
 
 - name: "Creating services"
   hosts: all

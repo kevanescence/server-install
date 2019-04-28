@@ -2,7 +2,34 @@
   stat:
     path: "/home/{{user_nextcloud}}/"
   register: is_nextcloud_installed
+  tags:
+    - cloud
 
+- name: "Prepare volume creation for nextcloud"
+  file: path="{{ path_nextcloud_data }}" state=directory
+  become: yes
+  tags:
+    - cloud
+
+- user:
+    name: '{{ user_nextcloud }}'
+    comment: "Nextcloud service user"
+    uid: 1042
+  become: yes
+  tags:
+    - cloud
+
+- name: "Creating nextcloud volume if not present"
+  docker_volume:
+    name: data_nextcloud
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_nextcloud_data }}"
+      o: bind
+  become: yes
+  tags:
+    - cloud
 
 - mysql_db:
     login_host: 127.0.0.1
@@ -11,6 +38,8 @@
     login_port:  "{{ port_mysql }}"
     name: "{{user_nextcloud}}"
     state: present
+  tags:
+    - cloud
 
 - name: "Create mysql user for nextcloud service"
   mysql_user:
@@ -23,6 +52,8 @@
     priv: '{{user_nextcloud}}.*:ALL,GRANT'
     state: present
     host: '172.17.0.%'
+  tags:
+    - cloud
 
 - name: "Copy existing nextcloud data"
   remote_user: "{{ansible_ssh_user}}"
@@ -36,7 +67,8 @@
       - "--exclude=_data"
   become: yes
   when: "is_nextcloud_installed.stat.exists == False"
-
+  tags:
+    - cloud
 
 - name: "Changing nextcloud credentials (db name)"
   replace:
@@ -45,6 +77,8 @@
     replace: "'dbname' => '{{user_nextcloud}}',"
     backup: yes
   become: yes
+  tags:
+    - cloud
 
 - name: "Changing nextcloud credentials (db user)"
   replace:
@@ -53,6 +87,8 @@
     replace: "'dbuser' => '{{user_nextcloud}}',"
     backup: yes
   become: yes
+  tags:
+    - cloud
 
 - name: "Changing nextcloud credentials (db password)"
   replace:
@@ -61,11 +97,15 @@
     replace: "'dbpassword' => '{{password_mysql_nextcloud}}',"
     backup: yes
   become: yes
+  tags:
+    - cloud
 
 
 - name: "Setting ownership"
   file: dest="/home/{{user_nextcloud}}/data" owner=www-data group=www-data mode=0771 recurse=yes
   become: yes
+  tags:
+    - cloud
 
 - name: "Copy Nextcloud SQL data file"
   copy:
@@ -76,16 +116,22 @@
     mode: 0770
     force: yes
   become: yes
+  tags:
+    - cloud
 
 - name: "Retrieving date of existing Nextcloud DB dump"
   shell: grep "Dump completed on" "/home/{{user_nextcloud}}/nextcloud.sql"|tail -1 |awk -F 'on ' '{print $2}'
   register: nextcloud_sqldump_lookup
   become: yes
   ignore_errors:  no
+  tags:
+    - cloud
 
 - fail:
     msg: "Did not find any dump information (Looking for Dump completed on) in remote /home/{{user_nextcloud}}/nextcloud.sql file"
   when: nextcloud_sqldump_lookup.stdout == ''
+  tags:
+    - cloud
 
 - name: "Importing existing mysql base for nextcloud"
   mysql_db:
@@ -96,13 +142,17 @@
     name: '{{user_nextcloud}}'
     state: import
     target: '/home/{{user_nextcloud}}/nextcloud.sql'
-  when: nextcloud_sqldump_lookup.stdout > nextcloud_table_last_modified_lookup.stdout
+  when: "is_nextcloud_installed.stat.exists == False"
+
+#  when: nextcloud_sqldump_lookup.stdout > nextcloud_table_last_modified_lookup.stdout
   become: yes
+  tags:
+    - cloud
 
 - name: "Creating nextcloud container"
   docker_container:
     name: storage-server
-    image: "nextcloud:12"
+    image: "nextcloud:15"
     state: started
 
     restart_policy: unless-stopped
@@ -124,6 +174,7 @@
       - data_nextcloud:/var/www/html
 
   tags:
+    - cloud
     - upgrade
 
 

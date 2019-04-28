@@ -2,6 +2,76 @@
   stat:
     path: "/home/{{user_piwigo}}/"
   register: is_piwigo_installed
+  tags:
+    - photos
+
+- user:
+    name: service-photos
+    comment: "Piwigo service user"
+    uid: 1040
+  become: yes
+  tags:
+    - photos
+
+- name: "Prepare volume creation"
+  file: path="{{ path_photos_pictures }}" state=directory
+  become: yes
+  tags:
+    - photos
+
+- name: "Prepare volume creation"
+  file: path="{{ path_photos_config }}" state=directory
+  become: yes
+  tags:
+    - photos
+
+- name: "Creating piwigo volume if not present"
+  docker_volume:
+    name: data_photos_pictures
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_photos_pictures }}"
+      o: bind
+  become: yes
+  tags:
+    - photos
+
+- name: "Creating piwigo volume for config if not present"
+  docker_volume:
+    name: data_photos_config
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_photos_config }}"
+      o: bind
+  become: yes
+  tags:
+    - photos
+
+- name: "Creating piwigo container"
+  docker_container:
+    name: photos-server
+    image: linuxserver/piwigo
+    state: started
+    recreate: yes
+    restart_policy: unless-stopped
+    restart: yes
+    env:
+        PGID: 1040
+        PUID: 1040
+        TZ: "UTC"
+    links:
+      - "mysql:piwigo_mysql"
+    published_ports:
+      - "{{ port_photos }}:80"
+    volumes:
+      - "data_photos_config:/config"
+      - "data_photos_photos:/pictures"
+      - /etc/localtime:/etc/localtime:ro
+  become: yes
+  tags:
+    - photos
 
 - name: "Copy existing photos data"
   remote_user: "{{ansible_ssh_user}}"
@@ -15,12 +85,14 @@
       - "--exclude=_data"
   become: yes
   when: "is_piwigo_installed.stat.exists == False"
-
+  tags:
+    - photos
 
 - name: "Setting ownership"
   file: dest="/home/{{user_piwigo}}/config" owner={{user_piwigo}} group={{user_piwigo}} mode=0770 recurse=yes
   become: yes
-
+  tags:
+    - photos
 - name: "Copy piwigo sql data file"
   copy:
     src: "{{initial_data}}/piwigo.sql"
@@ -30,25 +102,31 @@
     mode: 0770
     force: yes
   become: yes
-
+  tags:
+    - photos
 - name: "Retrieving date of existing piwigo DB dump"
   shell: grep "Dump completed on" "/home/{{user_piwigo}}/piwigo.sql"|tail -1 |awk -F 'on ' '{print $2}'
   register: piwigo_sqldump_lookup
   become: yes
   ignore_errors:  no
-
+  tags:
+    - photos
 - fail:
     msg: "Did not find any dump information (Looking for Dump completed on) in remote /home/{{user_piwigo}}/piwigo.sql file"
   when: piwigo_sqldump_lookup.stdout == ''
-
+  tags:
+    - photos
 - debug: msg="{{piwigo_sqldump_lookup}}"
-
+  tags:
+    - photos
 - name: "Retrieving last modification date of existing piwigo SQL tables"
   command: mysql -h 127.0.0.1 -u root -p{{ password_mysql_root }} {{user_piwigo}} -Ns -e "{{sql}}"
   vars:
     sql: "SELECT UPDATE_TIME FROM information_schema.tables where  `table_name` like 'piwigo%' order by UPDATE_TIME desc  limit 1;"
   register: piwigo_table_last_modified_lookup
-
+  tags:
+    - photos
+    -
 - name: "Create mysql database for piwigo"
   mysql_db:
     login_host: 127.0.0.1
@@ -60,3 +138,5 @@
     target: '/home/{{user_piwigo}}/piwigo.sql'
   when: piwigo_sqldump_lookup.stdout > piwigo_table_last_modified_lookup.stdout
   become: yes
+  tags:
+    - photos

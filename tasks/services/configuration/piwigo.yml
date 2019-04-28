@@ -9,7 +9,8 @@
     priv: '{{user_piwigo}}.*:ALL,GRANT'
     state: present
     host: '172.17.0.%'
-
+  tags:
+    - services
 - name: "Changing piwigo credentials (db name)"
   replace:
     path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
@@ -17,7 +18,8 @@
     replace: "conf['db_base'] = '{{user_piwigo}}';"
     backup: yes
   become: yes
-
+  tags:
+    - services
 - name: "Changing piwigo credentials (db user)"
   replace:
     path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
@@ -25,7 +27,8 @@
     replace: "conf['db_user'] = '{{user_piwigo}}';"
     backup: yes
   become: yes
-
+  tags:
+    - services
 - name: "Changing piwigo credentials (db host)"
   replace:
     path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
@@ -33,7 +36,8 @@
     replace: "conf['db_host'] = 'piwigo_mysql';"
     backup: yes
   become: yes
-
+  tags:
+    - services
 - name: "Changing piwigo credentials (db password)"
   replace:
     path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
@@ -41,4 +45,5 @@
     replace: "conf['db_password'] = '{{ password_mysql_piwigo }}';"
     backup: yes
   become: yes
-
+  tags:
+    - services
