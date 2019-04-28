@@ -1,7 +1,9 @@
 roles/*
 .vagrant
 main.retry
+initial_data/
 inventory.ini
 inventory.ini.vagrant
 *.swp
 !roles/reverseproxy
+.idea
