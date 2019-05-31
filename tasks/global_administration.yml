@@ -6,8 +6,51 @@
   file: path=/root/.ssh state=absent
   sudo: yes
 
+- name: Check swap existance
+  stat:
+    path: /dev/sda5
+  register: original_mount
+
+- name: Turn off swap
+  command: swapoff /dev/sda5
+  become: yes
+  when: original_mount.stat.exists == true
+  tags:
+    -  dev
+
+- mount:
+    path: /dev/sda2
+    state: unmounted
+  become: yes
+
+  tags:
+    - dev
+
+- parted:
+     device: /dev/sda
+     number: 2
+     state: absent
+  become: yes
+  tags:
+    - dev
+
+- name: Grow part sda1
+  command: growpart /dev/sda 1
+  become: yes
+  when: original_mount.stat.exists == true
+  tags:
+    -  dev
+
+- name: Grow part sda1
+  command: resize2fs /dev/sda1
+  become: yes
+  when: original_mount.stat.exists == true
+  tags:
+    -  dev
+
 - name: Remove root ssh login
   lineinfile:
+
     path: /etc/ssh/sshd_config
     regexp: '^PermitRootLogin'
     line: 'PermitRootLogin no'

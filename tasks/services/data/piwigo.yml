@@ -49,6 +49,32 @@
   tags:
     - photos
 
+
+- name: "Prepare directory to synchronize photos data"
+  file:
+    path: "/home/{{user_piwigo}}/config/"
+    state: directory
+    recurse: yes
+  become: yes
+  tags:
+    - photos
+
+
+- name: "Copy existing photos data"
+  remote_user: "{{ansible_ssh_user}}"
+  synchronize:
+    mode: push
+    src: "{{initial_data}}/photos/"
+    dest: "{{ansible_ssh_user}}@{{inventory_hostname}}:/home/{{user_piwigo}}/config/"
+    recursive: yes
+    rsync_path: "sudo rsync --rsh 'ssh -S none -o StrictHostKeyChecking=no -o Port={{ansible_ssh_port}}'"
+    rsync_opts:
+      - "--exclude=_data"
+  become: yes
+  when: "is_piwigo_installed.stat.exists == False"
+  tags:
+    - photos
+
 - name: "Creating piwigo container"
   docker_container:
     name: photos-server
@@ -67,24 +93,7 @@
       - "{{ port_photos }}:80"
     volumes:
       - "data_photos_config:/config"
-      - "data_photos_photos:/pictures"
-      - /etc/localtime:/etc/localtime:ro
   become: yes
-  tags:
-    - photos
-
-- name: "Copy existing photos data"
-  remote_user: "{{ansible_ssh_user}}"
-  synchronize:
-    mode: push
-    src: "{{initial_data}}/photos/"
-    dest: "{{ansible_ssh_user}}@{{inventory_hostname}}:/home/{{user_piwigo}}/config/www/gallery"
-    recursive: yes
-    rsync_path: "sudo rsync --rsh 'ssh -S none -o StrictHostKeyChecking=no -o Port={{ansible_ssh_port}}'"
-    rsync_opts:
-      - "--exclude=_data"
-  become: yes
-  when: "is_piwigo_installed.stat.exists == False"
   tags:
     - photos
 
@@ -104,6 +113,7 @@
   become: yes
   tags:
     - photos
+
 - name: "Retrieving date of existing piwigo DB dump"
   shell: grep "Dump completed on" "/home/{{user_piwigo}}/piwigo.sql"|tail -1 |awk -F 'on ' '{print $2}'
   register: piwigo_sqldump_lookup
@@ -111,6 +121,8 @@
   ignore_errors:  no
   tags:
     - photos
+
+
 - fail:
     msg: "Did not find any dump information (Looking for Dump completed on) in remote /home/{{user_piwigo}}/piwigo.sql file"
   when: piwigo_sqldump_lookup.stdout == ''
@@ -126,7 +138,7 @@
   register: piwigo_table_last_modified_lookup
   tags:
     - photos
-    -
+
 - name: "Create mysql database for piwigo"
   mysql_db:
     login_host: 127.0.0.1

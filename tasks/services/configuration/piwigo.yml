@@ -10,7 +10,7 @@
     state: present
     host: '172.17.0.%'
   tags:
-    - services
+    - photos
 - name: "Changing piwigo credentials (db name)"
   replace:
     path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
@@ -19,7 +19,7 @@
     backup: yes
   become: yes
   tags:
-    - services
+    - photos
 - name: "Changing piwigo credentials (db user)"
   replace:
     path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
@@ -28,7 +28,7 @@
     backup: yes
   become: yes
   tags:
-    - services
+    - photos
 - name: "Changing piwigo credentials (db host)"
   replace:
     path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
@@ -37,7 +37,7 @@
     backup: yes
   become: yes
   tags:
-    - services
+    - photos
 - name: "Changing piwigo credentials (db password)"
   replace:
     path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
@@ -46,4 +46,4 @@
     backup: yes
   become: yes
   tags:
-    - services
+    - photos

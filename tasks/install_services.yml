@@ -3,12 +3,12 @@
     name: "{{ item }}"
   with_items:
     - selenium/hub
-    - linuxserver/piwigo
-    - nextcloud:12
-    - nextcloud:13
-    - nextcloud:14
-    - nextcloud:15
+    - linuxserver/piwigo:latest
+    - nextcloud:16
   become: yes
+  tags:
+    - cloud
+    - photos
 
 
 - user:

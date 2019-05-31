@@ -20,6 +20,9 @@
     - acl
     - gcc
     - firewalld
+    - parted
+    - cloud-utils
+
   become: yes
 
 - name: "Docker - add docker hug gpg key"

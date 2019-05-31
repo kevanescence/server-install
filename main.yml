@@ -7,6 +7,8 @@
       tags:
         - system
 
+
+
 - name: Several global administration tasks
   hosts: all
   tasks:

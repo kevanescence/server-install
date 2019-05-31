@@ -133,6 +133,14 @@
   tags:
     - cloud
 
+- name: "Retrieving last modification date of existing piwigo SQL tables"
+  command: mysql -h 127.0.0.1 -u root -p{{ password_mysql_root }} {{user_nextcloud}} -Ns -e "{{sql}}"
+  vars:
+    sql: "SELECT UPDATE_TIME FROM information_schema.tables where  `table_name` like 'nextcloud' order by UPDATE_TIME desc  limit 1;"
+  register: nextcloud_table_last_modified_lookup
+  tags:
+    - cloud
+
 - name: "Importing existing mysql base for nextcloud"
   mysql_db:
     login_host: 127.0.0.1
@@ -152,7 +160,7 @@
 - name: "Creating nextcloud container"
   docker_container:
     name: storage-server
-    image: "nextcloud:15"
+    image: "nextcloud:16"
     state: started
 
     restart_policy: unless-stopped
