@@ -4,7 +4,7 @@
   with_items:
     - selenium/hub
     - linuxserver/piwigo:latest
-    - nextcloud:16
+    - nextcloud:15
   become: yes
   tags:
     - cloud

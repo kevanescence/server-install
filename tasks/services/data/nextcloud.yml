@@ -38,6 +38,7 @@
     login_port:  "{{ port_mysql }}"
     name: "{{user_nextcloud}}"
     state: present
+  when: ansible_ssh_user == 'vagrant'
   tags:
     - cloud
 
@@ -52,6 +53,7 @@
     priv: '{{user_nextcloud}}.*:ALL,GRANT'
     state: present
     host: '172.17.0.%'
+  when: ansible_ssh_user == 'vagrant'
   tags:
     - cloud
 
@@ -66,7 +68,7 @@
     rsync_opts:
       - "--exclude=_data"
   become: yes
-  when: "is_nextcloud_installed.stat.exists == False"
+  when: is_nextcloud_installed.stat.exists == False and ansible_ssh_user == 'vagrant'
   tags:
     - cloud
 
@@ -124,12 +126,13 @@
   register: nextcloud_sqldump_lookup
   become: yes
   ignore_errors:  no
+  when: ansible_ssh_user == 'vagrant'
   tags:
     - cloud
 
 - fail:
     msg: "Did not find any dump information (Looking for Dump completed on) in remote /home/{{user_nextcloud}}/nextcloud.sql file"
-  when: nextcloud_sqldump_lookup.stdout == ''
+  when:  ansible_ssh_user == 'vagrant' and nextcloud_sqldump_lookup.stdout == ''
   tags:
     - cloud
 
@@ -138,6 +141,7 @@
   vars:
     sql: "SELECT UPDATE_TIME FROM information_schema.tables where  `table_name` like 'nextcloud' order by UPDATE_TIME desc  limit 1;"
   register: nextcloud_table_last_modified_lookup
+  when: ansible_ssh_user == 'vagrant'
   tags:
     - cloud
 
@@ -150,9 +154,8 @@
     name: '{{user_nextcloud}}'
     state: import
     target: '/home/{{user_nextcloud}}/nextcloud.sql'
-  when: "is_nextcloud_installed.stat.exists == False"
-
-#  when: nextcloud_sqldump_lookup.stdout > nextcloud_table_last_modified_lookup.stdout
+  when: is_nextcloud_installed.stat.exists == False and ansible_ssh_user == 'vagrant'
+  #  when: nextcloud_sqldump_lookup.stdout > nextcloud_table_last_modified_lookup.stdout
   become: yes
   tags:
     - cloud
@@ -160,7 +163,7 @@
 - name: "Creating nextcloud container"
   docker_container:
     name: storage-server
-    image: "nextcloud:16"
+    image: "nextcloud:15"
     state: started
 
     restart_policy: unless-stopped

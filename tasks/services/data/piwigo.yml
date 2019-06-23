@@ -71,7 +71,7 @@
     rsync_opts:
       - "--exclude=_data"
   become: yes
-  when: "is_piwigo_installed.stat.exists == False"
+  when: "is_piwigo_installed.stat.exists == False and ansible_ssh_user == 'vagrant'"
   tags:
     - photos
 
@@ -148,7 +148,8 @@
     name: '{{user_piwigo}}'
     state: import
     target: '/home/{{user_piwigo}}/piwigo.sql'
-  when: piwigo_sqldump_lookup.stdout > piwigo_table_last_modified_lookup.stdout
+  when: piwigo_sqldump_lookup.stdout > piwigo_table_last_modified_lookup.stdout and ansible_ssh_user == "vagrant"
+
   become: yes
   tags:
     - photos

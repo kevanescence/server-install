@@ -10,11 +10,12 @@
   stat:
     path: /dev/sda5
   register: original_mount
+  when: ansible_ssh_user == "vagrant"
 
 - name: Turn off swap
   command: swapoff /dev/sda5
   become: yes
-  when: original_mount.stat.exists == true
+  when: ansible_ssh_user == "vagrant" and original_mount.stat.exists == true
   tags:
     -  dev
 
@@ -22,7 +23,7 @@
     path: /dev/sda2
     state: unmounted
   become: yes
-
+  when: ansible_ssh_user == "vagrant"
   tags:
     - dev
 
@@ -31,20 +32,21 @@
      number: 2
      state: absent
   become: yes
+  when: ansible_ssh_user == "vagrant"
   tags:
     - dev
 
 - name: Grow part sda1
   command: growpart /dev/sda 1
   become: yes
-  when: original_mount.stat.exists == true
+  when: ansible_ssh_user == "vagrant" and original_mount.stat.exists == true
   tags:
     -  dev
 
-- name: Grow part sda1
+- name: Resize sda1
   command: resize2fs /dev/sda1
   become: yes
-  when: original_mount.stat.exists == true
+  when: ansible_ssh_user == "vagrant" and original_mount.stat.exists == true
   tags:
     -  dev
 
