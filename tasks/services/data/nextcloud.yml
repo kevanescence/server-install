@@ -1,0 +1,192 @@
+- name: "Check if nextcloud is already installed"
+  stat:
+    path: "/home/{{user_nextcloud}}/"
+  register: is_nextcloud_installed
+  tags:
+    - cloud
+
+- name: "Prepare volume creation for nextcloud"
+  file: path="{{ path_nextcloud_data }}" state=directory
+  become: yes
+  tags:
+    - cloud
+
+- user:
+    name: '{{ user_nextcloud }}'
+    comment: "Nextcloud service user"
+    uid: 1042
+  become: yes
+  tags:
+    - cloud
+
+- name: "Creating nextcloud volume if not present"
+  docker_volume:
+    name: data_nextcloud
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_nextcloud_data }}"
+      o: bind
+  become: yes
+  tags:
+    - cloud
+
+- mysql_db:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password:  "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: "{{user_nextcloud}}"
+    state: present
+  when: ansible_ssh_user == 'vagrant'
+  tags:
+    - cloud
+
+- name: "Create mysql user for nextcloud service"
+  mysql_user:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password: "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: '{{ user_nextcloud }}'
+    password: "{{ password_mysql_nextcloud }}"
+    priv: '{{user_nextcloud}}.*:ALL,GRANT'
+    state: present
+    host: '172.17.0.%'
+  when: ansible_ssh_user == 'vagrant'
+  tags:
+    - cloud
+
+- name: "Copy existing nextcloud data"
+  remote_user: "{{ansible_ssh_user}}"
+  synchronize:
+    mode: push
+    src: "{{initial_data}}/nextcloud/"
+    dest: "{{ansible_ssh_user}}@{{inventory_hostname}}:/home/{{user_nextcloud}}/"
+    recursive: yes
+    rsync_path: "sudo rsync --rsh 'ssh -S none -o StrictHostKeyChecking=no -o Port={{ansible_ssh_port}}'"
+    rsync_opts:
+      - "--exclude=_data"
+  become: yes
+  when: is_nextcloud_installed.stat.exists == False and ansible_ssh_user == 'vagrant'
+  tags:
+    - cloud
+
+- name: "Changing nextcloud credentials (db name)"
+  replace:
+    path: '/home/{{user_nextcloud}}/data/config/config.php'
+    regexp: "'dbname' => .*$"
+    replace: "'dbname' => '{{user_nextcloud}}',"
+    backup: yes
+  become: yes
+  tags:
+    - cloud
+
+- name: "Changing nextcloud credentials (db user)"
+  replace:
+    path: '/home/{{user_nextcloud}}/data/config/config.php'
+    regexp: "'dbuser' => .*$"
+    replace: "'dbuser' => '{{user_nextcloud}}',"
+    backup: yes
+  become: yes
+  tags:
+    - cloud
+
+- name: "Changing nextcloud credentials (db password)"
+  replace:
+    path: '/home/{{user_nextcloud}}/data/config/config.php'
+    regexp: "'dbpassword' => .*$"
+    replace: "'dbpassword' => '{{password_mysql_nextcloud}}',"
+    backup: yes
+  become: yes
+  tags:
+    - cloud
+
+
+- name: "Setting ownership"
+  file: dest="/home/{{user_nextcloud}}/data" owner=www-data group=www-data mode=0771 recurse=yes
+  become: yes
+  tags:
+    - cloud
+
+- name: "Copy Nextcloud SQL data file"
+  copy:
+    src: "{{initial_data}}/nextcloud.sql"
+    dest: "/home/{{user_nextcloud}}/nextcloud.sql"
+    owner: '{{user_nextcloud}}'
+    group: '{{user_nextcloud}}'
+    mode: 0770
+    force: yes
+  become: yes
+  tags:
+    - cloud
+
+- name: "Retrieving date of existing Nextcloud DB dump"
+  shell: grep "Dump completed on" "/home/{{user_nextcloud}}/nextcloud.sql"|tail -1 |awk -F 'on ' '{print $2}'
+  register: nextcloud_sqldump_lookup
+  become: yes
+  ignore_errors:  no
+  when: ansible_ssh_user == 'vagrant'
+  tags:
+    - cloud
+
+- fail:
+    msg: "Did not find any dump information (Looking for Dump completed on) in remote /home/{{user_nextcloud}}/nextcloud.sql file"
+  when:  ansible_ssh_user == 'vagrant' and nextcloud_sqldump_lookup.stdout == ''
+  tags:
+    - cloud
+
+- name: "Retrieving last modification date of existing piwigo SQL tables"
+  command: mysql -h 127.0.0.1 -u root -p{{ password_mysql_root }} {{user_nextcloud}} -Ns -e "{{sql}}"
+  vars:
+    sql: "SELECT UPDATE_TIME FROM information_schema.tables where  `table_name` like 'nextcloud' order by UPDATE_TIME desc  limit 1;"
+  register: nextcloud_table_last_modified_lookup
+  when: ansible_ssh_user == 'vagrant'
+  tags:
+    - cloud
+
+- name: "Importing existing mysql base for nextcloud"
+  mysql_db:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password: "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: '{{user_nextcloud}}'
+    state: import
+    target: '/home/{{user_nextcloud}}/nextcloud.sql'
+  when: is_nextcloud_installed.stat.exists == False and ansible_ssh_user == 'vagrant'
+  #  when: nextcloud_sqldump_lookup.stdout > nextcloud_table_last_modified_lookup.stdout
+  become: yes
+  tags:
+    - cloud
+
+- name: "Creating nextcloud container"
+  docker_container:
+    name: storage-server
+    image: "nextcloud:15"
+    state: started
+
+    restart_policy: unless-stopped
+    recreate: yes
+    restart: yes
+    env:
+      NEXTCLOUD_ADMIN_USER: "{{user_nextcloud_admin}}"
+      NEXTCLOUD_ADMIN_PASSWORD: "{{password_nextcloud_admin}}"
+      MYSQL_DATABASE: "{{user_nextcloud}}"
+      MYSQL_USER: "{{user_nextcloud}}"
+      MYSQL_PASSWORD: "{{ password_mysql_nextcloud }}"
+      MYSQL_HOST: "nextcloud_mysql"
+
+    published_ports:
+      - "{{ port_nextcloud }}:80"
+    links:
+      - "mysql:nextcloud_mysql"
+    volumes:
+      - data_nextcloud:/var/www/html
+
+  tags:
+    - cloud
+    - upgrade
+
+
+  become: yes

@@ -1,0 +1,71 @@
+- name: "Downloading docker images"
+  docker_image:
+    name: "{{ item }}"
+  with_items:
+    - selenium/hub
+    - linuxserver/piwigo:latest
+    - nextcloud:15
+  become: yes
+  tags:
+    - cloud
+    - photos
+
+
+- user:
+    name: "{{ user_mysql }}"
+    comment: "Mysql service user"
+    uid: 1041
+  become: yes
+
+- name: "Prepare volume creation for mysql"
+  file: path="{{ path_mysql_data }}" state=directory
+  become: yes
+
+# First iteration would fail without that.
+- name: "Workaround to create empty volume"
+  shell: "docker volume create"
+  become: yes
+
+- name: "Creating mysql volume if not present"
+  docker_volume:
+    name: data_mysql
+    state: present
+    driver_options:
+      type: none
+      device: "{{ path_mysql_data }}"
+      o: bind
+  become: yes
+
+- name: "Creating a mysql container"
+  docker_container:
+    name: mysql
+    image: mysql:5.7
+    state: started
+    restart_policy: unless-stopped
+    recreate: yes
+    restart: yes
+    env:
+        MYSQL_ROOT_PASSWORD: "{{ password_mysql_root }}"
+    published_ports:
+      - "127.0.0.1:{{ port_mysql }}:3306"
+    volumes:
+      - "data_mysql:/var/lib/mysql"
+  become: yes
+
+
+- mysql_db:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password: "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: service-photos
+    state: present
+  retries: 5
+  delay: 4
+  register: result
+  until: result|succeeded
+  ignore_errors: yes
+
+
+
+

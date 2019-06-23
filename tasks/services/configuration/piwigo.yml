@@ -1,0 +1,49 @@
+- name: "Create mysql user for piwigo service"
+  mysql_user:
+    login_host: 127.0.0.1
+    login_user: root
+    login_password: "{{ password_mysql_root }}"
+    login_port:  "{{ port_mysql }}"
+    name: '{{ user_piwigo }}'
+    password: "{{ password_mysql_piwigo }}"
+    priv: '{{user_piwigo}}.*:ALL,GRANT'
+    state: present
+    host: '172.17.0.%'
+  tags:
+    - photos
+- name: "Changing piwigo credentials (db name)"
+  replace:
+    path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
+    regexp: "conf\\['db_base'\\] = .*$"
+    replace: "conf['db_base'] = '{{user_piwigo}}';"
+    backup: yes
+  become: yes
+  tags:
+    - photos
+- name: "Changing piwigo credentials (db user)"
+  replace:
+    path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
+    regexp: "conf\\['db_user'\\] = .*$"
+    replace: "conf['db_user'] = '{{user_piwigo}}';"
+    backup: yes
+  become: yes
+  tags:
+    - photos
+- name: "Changing piwigo credentials (db host)"
+  replace:
+    path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
+    regexp: "conf\\['db_host'\\] = .*$"
+    replace: "conf['db_host'] = 'piwigo_mysql';"
+    backup: yes
+  become: yes
+  tags:
+    - photos
+- name: "Changing piwigo credentials (db password)"
+  replace:
+    path: '/home/{{user_piwigo}}/config/www/gallery/local/config/database.inc.php'
+    regexp: "conf\\['db_password'\\] = .*$"
+    replace: "conf['db_password'] = '{{ password_mysql_piwigo }}';"
+    backup: yes
+  become: yes
+  tags:
+    - photos

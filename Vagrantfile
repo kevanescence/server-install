@@ -9,11 +9,10 @@ Vagrant.configure("2") do |config|
   # The most common configuration options are documented and commented below.
   # For a complete reference, please see the online documentation at
   # https://docs.vagrantup.com.
-
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
   config.vm.box = "debian/stretch64"
-
+  config.disksize.size = "20GB"
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
   # `vagrant box outdated`. This is not recommended.
@@ -25,6 +24,8 @@ Vagrant.configure("2") do |config|
   config.vm.network "forwarded_port", guest: 9180, host: 8080
   config.vm.network "forwarded_port", guest: 8010, host: 8081
   config.vm.network "forwarded_port", guest: 8011, host: 8082
+  config.vm.network "forwarded_port", guest: 8012, host: 8083
+
 
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
@@ -80,6 +81,8 @@ Vagrant.configure("2") do |config|
     ansible.playbook = "main.yml"
     ansible.inventory_path = "inventory.ini"
     ansible.limit = "all"
+    ansible.tags = "#{ENV['tags']}"
+
   end
 
 end

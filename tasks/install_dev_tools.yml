@@ -1,0 +1,11 @@
+- name: "Creating selenium hub container"
+  docker_container:
+    name: selenium-hub
+    image: selenium/hub
+    state: started
+    restart_policy: unless-stopped
+    recreate: yes
+    restart: yes
+    published_ports:
+      - "127.0.0.1:4444:4444"
+  become: yes
